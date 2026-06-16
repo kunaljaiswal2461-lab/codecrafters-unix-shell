@@ -92,9 +92,25 @@ public class Main {
                 String targetDir = parts[1];
                 Path targetPath;
 
+                // Handle ~
+                if (targetDir.equals("~")) {
+                    String home = System.getenv("HOME");
+
+                    if (home != null) {
+                        currentDirectory = Paths.get(home)
+                                .toAbsolutePath()
+                                .normalize();
+                    }
+
+                    continue;
+                }
+
+                // Absolute path
                 if (Paths.get(targetDir).isAbsolute()) {
                     targetPath = Paths.get(targetDir);
-                } else {
+                }
+                // Relative path
+                else {
                     targetPath = currentDirectory.resolve(targetDir);
                 }
 
@@ -135,7 +151,7 @@ public class Main {
                 continue;
             }
 
-            // external command
+            // external commands
             String executable = findExecutable(command);
 
             if (executable != null) {
