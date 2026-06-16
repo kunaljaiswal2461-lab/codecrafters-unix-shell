@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class Main {
     private static final Set<String> BUILTINS = Set.of("echo", "exit", "type", "pwd", "cd", "jobs", "complete");
     private static final Map<Integer, Job> JOBS = new HashMap<>();
-    private static final Map<String, List<String>> COMPLETION_SPECS = new HashMap<>();
+    private static final Map<String, CompletionSpec> COMPLETION_SPECS = new HashMap<>();
     private static Path currentDirectory = Paths.get("").toAbsolutePath().normalize();
     private static boolean skipLeadingLineFeed = false;
     private static String lastCompletionInput = null;
@@ -41,6 +41,9 @@ public class Main {
     }
 
     private record ParsedLine(List<Command> commands, boolean background, String originalCommand) {
+    }
+
+    private record CompletionSpec(String command, String script) {
     }
 
     private static class Job {
@@ -510,12 +513,19 @@ public class Main {
     private static void runComplete(Command command, PrintStream out, PrintStream err) {
         if (command.args.size() >= 3 && command.args.get(1).equals("-p")) {
             String name = command.args.get(2);
-            List<String> specification = COMPLETION_SPECS.get(name);
+            CompletionSpec specification = COMPLETION_SPECS.get(name);
             if (specification == null) {
                 out.println("complete: " + name + ": no completion specification");
             } else {
-                out.println(String.join(" ", specification));
+                out.println("complete -C '" + specification.script() + "' " + specification.command());
             }
+            return;
+        }
+
+        if (command.args.size() >= 4 && command.args.get(1).equals("-C")) {
+            String script = command.args.get(2);
+            String name = command.args.get(3);
+            COMPLETION_SPECS.put(name, new CompletionSpec(name, script));
         }
     }
 
