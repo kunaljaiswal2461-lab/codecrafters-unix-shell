@@ -1,6 +1,7 @@
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -17,7 +18,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
-import java.util.Scanner;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class Main {
@@ -58,31 +58,134 @@ public class Main {
     }
 
     public static void main(String[] args) throws Exception {
-        Scanner scanner = new Scanner(System.in);
+        TerminalMode terminalMode = enableRawMode();
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> restoreTerminal(terminalMode)));
+
+        try {
+            while (true) {
+                reapCompletedJobs();
+                System.out.print("$ ");
+                System.out.flush();
+
+                String input = readInputLine();
+                if (input == null) {
+                    break;
+                }
+
+                if (input.trim().isEmpty()) {
+                    continue;
+                }
+
+                try {
+                    ParsedLine parsed = parseLine(input);
+                    if (parsed.commands().isEmpty()) {
+                        continue;
+                    }
+                    execute(parsed);
+                } catch (ShellParseException e) {
+                    System.err.println(e.getMessage());
+                }
+            }
+        } finally {
+            restoreTerminal(terminalMode);
+        }
+    }
+
+    private static String readInputLine() throws IOException {
+        InputStream input = System.in;
+        StringBuilder line = new StringBuilder();
 
         while (true) {
-            reapCompletedJobs();
-            System.out.print("$ ");
-            System.out.flush();
-
-            if (!scanner.hasNextLine()) {
-                break;
+            int value = input.read();
+            if (value == -1) {
+                return line.isEmpty() ? null : line.toString();
             }
 
-            String input = scanner.nextLine();
-            if (input.trim().isEmpty()) {
+            char ch = (char) value;
+            if (ch == '\n' || ch == '\r') {
+                System.out.println();
+                return line.toString();
+            }
+
+            if (ch == '\t') {
+                completeBuiltin(line);
                 continue;
             }
 
-            try {
-                ParsedLine parsed = parseLine(input);
-                if (parsed.commands().isEmpty()) {
-                    continue;
+            if (ch == 127 || ch == '\b') {
+                if (!line.isEmpty()) {
+                    line.deleteCharAt(line.length() - 1);
+                    System.out.print("\b \b");
+                    System.out.flush();
                 }
-                execute(parsed);
-            } catch (ShellParseException e) {
-                System.err.println(e.getMessage());
+                continue;
             }
+
+            line.append(ch);
+            System.out.print(ch);
+            System.out.flush();
+        }
+    }
+
+    private static void completeBuiltin(StringBuilder line) {
+        String current = line.toString();
+        if (current.contains(" ") || current.contains("\t")) {
+            return;
+        }
+
+        List<String> matches = BUILTINS.stream()
+                .filter(builtin -> builtin.startsWith(current))
+                .sorted()
+                .toList();
+
+        if (matches.size() == 1) {
+            String completion = matches.get(0).substring(current.length()) + " ";
+            line.append(completion);
+            System.out.print(completion);
+        } else if (matches.isEmpty()) {
+            System.out.print("\u0007");
+        }
+        System.out.flush();
+    }
+
+    private record TerminalMode(boolean changed, String settings) {
+    }
+
+    private static TerminalMode enableRawMode() {
+        try {
+            Process readSettings = new ProcessBuilder("sh", "-c", "stty -g < /dev/tty")
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .start();
+            String settings = new String(readSettings.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+            if (readSettings.waitFor() != 0 || settings.isEmpty()) {
+                return new TerminalMode(false, "");
+            }
+
+            Process rawMode = new ProcessBuilder("sh", "-c", "stty -echo -icanon min 1 time 0 < /dev/tty")
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .start();
+            if (rawMode.waitFor() != 0) {
+                return new TerminalMode(false, "");
+            }
+
+            return new TerminalMode(true, settings);
+        } catch (Exception e) {
+            return new TerminalMode(false, "");
+        }
+    }
+
+    private static void restoreTerminal(TerminalMode mode) {
+        if (mode == null || !mode.changed()) {
+            return;
+        }
+
+        try {
+            new ProcessBuilder("sh", "-c", "stty " + mode.settings() + " < /dev/tty")
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .start()
+                    .waitFor();
+        } catch (Exception ignored) {
+            // Best effort terminal restoration.
         }
     }
 
