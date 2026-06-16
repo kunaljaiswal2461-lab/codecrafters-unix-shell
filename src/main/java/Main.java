@@ -24,6 +24,8 @@ public class Main {
     private static final Set<String> BUILTINS = Set.of("echo", "exit", "type", "pwd", "cd", "jobs");
     private static final Map<Integer, Job> JOBS = new HashMap<>();
     private static Path currentDirectory = Paths.get("").toAbsolutePath().normalize();
+    private static boolean skipLeadingLineFeed = false;
+    private static String lastCompletionInput = null;
 
     private record Redirection(int fd, Path target, boolean append) {
     }
@@ -102,7 +104,14 @@ public class Main {
             }
 
             char ch = (char) value;
+            if (line.isEmpty() && ch == '\n' && skipLeadingLineFeed) {
+                skipLeadingLineFeed = false;
+                continue;
+            }
+
             if (ch == '\n' || ch == '\r') {
+                skipLeadingLineFeed = ch == '\r';
+                lastCompletionInput = null;
                 System.out.println();
                 return line.toString();
             }
@@ -112,6 +121,7 @@ public class Main {
                 continue;
             }
 
+            lastCompletionInput = null;
             if (ch == 127 || ch == '\b') {
                 if (!line.isEmpty()) {
                     line.deleteCharAt(line.length() - 1);
@@ -130,22 +140,83 @@ public class Main {
     private static void completeBuiltin(StringBuilder line) {
         String current = line.toString();
         if (current.contains(" ") || current.contains("\t")) {
+            System.out.print("\u0007");
+            System.out.flush();
             return;
         }
 
-        List<String> matches = BUILTINS.stream()
-                .filter(builtin -> builtin.startsWith(current))
+        List<String> matches = completionCandidates().stream()
+                .filter(candidate -> candidate.startsWith(current))
                 .sorted()
+                .distinct()
                 .toList();
 
         if (matches.size() == 1) {
             String completion = matches.get(0).substring(current.length()) + " ";
             line.append(completion);
             System.out.print(completion);
+            lastCompletionInput = null;
         } else if (matches.isEmpty()) {
             System.out.print("\u0007");
+            lastCompletionInput = null;
+        } else {
+            String commonPrefix = commonPrefix(matches);
+            if (commonPrefix.length() > current.length()) {
+                String completion = commonPrefix.substring(current.length());
+                line.append(completion);
+                System.out.print(completion);
+                lastCompletionInput = null;
+            } else if (current.equals(lastCompletionInput)) {
+                System.out.println();
+                System.out.println(String.join("  ", matches));
+                System.out.print("$ " + current);
+                lastCompletionInput = null;
+            } else {
+                System.out.print("\u0007");
+                lastCompletionInput = current;
+            }
         }
         System.out.flush();
+    }
+
+    private static List<String> completionCandidates() {
+        List<String> candidates = new ArrayList<>(BUILTINS);
+        String pathEnv = System.getenv("PATH");
+        if (pathEnv == null) {
+            return candidates;
+        }
+
+        for (String dir : pathEnv.split(File.pathSeparator)) {
+            File directory = new File(dir);
+            File[] files = directory.listFiles();
+            if (files == null) {
+                continue;
+            }
+
+            for (File file : files) {
+                if (file.isFile() && file.canExecute()) {
+                    candidates.add(file.getName());
+                }
+            }
+        }
+        return candidates;
+    }
+
+    private static String commonPrefix(List<String> values) {
+        if (values.isEmpty()) {
+            return "";
+        }
+
+        String prefix = values.get(0);
+        for (int i = 1; i < values.size(); i++) {
+            String value = values.get(i);
+            int end = 0;
+            while (end < prefix.length() && end < value.length() && prefix.charAt(end) == value.charAt(end)) {
+                end++;
+            }
+            prefix = prefix.substring(0, end);
+        }
+        return prefix;
     }
 
     private record TerminalMode(boolean changed, String settings) {
