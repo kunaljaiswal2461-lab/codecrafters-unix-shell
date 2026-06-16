@@ -117,7 +117,7 @@ public class Main {
             }
 
             if (ch == '\t') {
-                completeBuiltin(line);
+                completeInput(line);
                 continue;
             }
 
@@ -137,22 +137,65 @@ public class Main {
         }
     }
 
-    private static void completeBuiltin(StringBuilder line) {
+    private static void completeInput(StringBuilder line) {
         String current = line.toString();
-        if (current.contains(" ") || current.contains("\t")) {
-            System.out.print("\u0007");
-            System.out.flush();
-            return;
-        }
+        int tokenStart = currentTokenStart(current);
+        String prefix = current.substring(tokenStart);
+        List<String> matches = tokenStart == 0
+                ? commandCompletionCandidates(prefix)
+                : filenameCompletionCandidates(prefix);
 
-        List<String> matches = completionCandidates().stream()
-                .filter(candidate -> candidate.startsWith(current))
+        applyCompletion(line, prefix, matches);
+    }
+
+    private static int currentTokenStart(String line) {
+        int index = line.length() - 1;
+        while (index >= 0 && !Character.isWhitespace(line.charAt(index))) {
+            index--;
+        }
+        return index + 1;
+    }
+
+    private static List<String> commandCompletionCandidates(String prefix) {
+        return completionCandidates().stream()
+                .filter(candidate -> candidate.startsWith(prefix))
                 .sorted()
                 .distinct()
                 .toList();
+    }
+
+    private static List<String> filenameCompletionCandidates(String prefix) {
+        Path typedPath = Paths.get(prefix);
+        Path searchDirectory = typedPath.getParent();
+        String filePrefix = typedPath.getFileName() == null ? "" : typedPath.getFileName().toString();
+        Path directory = searchDirectory == null ? currentDirectory : resolvePath(searchDirectory.toString());
+        String renderedPrefix = searchDirectory == null ? "" : searchDirectory + File.separator;
+
+        if (!Files.isDirectory(directory)) {
+            return List.of();
+        }
+
+        try (var stream = Files.list(directory)) {
+            return stream
+                    .map(path -> path.getFileName().toString())
+                    .filter(name -> name.startsWith(filePrefix))
+                    .map(name -> {
+                        Path fullPath = directory.resolve(name);
+                        String suffix = Files.isDirectory(fullPath) ? File.separator : "";
+                        return renderedPrefix + name + suffix;
+                    })
+                    .sorted()
+                    .toList();
+        } catch (IOException e) {
+            return List.of();
+        }
+    }
+
+    private static void applyCompletion(StringBuilder line, String prefix, List<String> matches) {
+        String current = line.toString();
 
         if (matches.size() == 1) {
-            String completion = matches.get(0).substring(current.length()) + " ";
+            String completion = matches.get(0).substring(prefix.length()) + " ";
             line.append(completion);
             System.out.print(completion);
             lastCompletionInput = null;
@@ -161,8 +204,8 @@ public class Main {
             lastCompletionInput = null;
         } else {
             String commonPrefix = commonPrefix(matches);
-            if (commonPrefix.length() > current.length()) {
-                String completion = commonPrefix.substring(current.length());
+            if (commonPrefix.length() > prefix.length()) {
+                String completion = commonPrefix.substring(prefix.length());
                 line.append(completion);
                 System.out.print(completion);
                 lastCompletionInput = null;
