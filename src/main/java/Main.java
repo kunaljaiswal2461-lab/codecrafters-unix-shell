@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class Main {
     private static final Set<String> BUILTINS = Set.of("echo", "exit", "type", "pwd", "cd", "jobs", "complete");
     private static final Map<Integer, Job> JOBS = new HashMap<>();
+    private static final Map<String, List<String>> COMPLETION_SPECS = new HashMap<>();
     private static Path currentDirectory = Paths.get("").toAbsolutePath().normalize();
     private static boolean skipLeadingLineFeed = false;
     private static String lastCompletionInput = null;
@@ -501,9 +502,20 @@ public class Main {
             case "type" -> runType(command, out);
             case "cd" -> runCd(command, err, allowDirectoryChange);
             case "jobs" -> runJobs(out);
-            case "complete" -> {
-            }
+            case "complete" -> runComplete(command, out, err);
             default -> err.println(name + ": command not found");
+        }
+    }
+
+    private static void runComplete(Command command, PrintStream out, PrintStream err) {
+        if (command.args.size() >= 3 && command.args.get(1).equals("-p")) {
+            String name = command.args.get(2);
+            List<String> specification = COMPLETION_SPECS.get(name);
+            if (specification == null) {
+                out.println("complete: " + name + ": no completion specification");
+            } else {
+                out.println(String.join(" ", specification));
+            }
         }
     }
 
