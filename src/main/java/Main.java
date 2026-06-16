@@ -1,4 +1,8 @@
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Scanner;
 import java.util.Set;
 
@@ -24,13 +28,17 @@ public class Main {
         return null;
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         Scanner sc = new Scanner(System.in);
 
         Set<String> builtins = Set.of("echo", "exit", "type");
 
         while (true) {
             System.out.print("$ ");
+
+            if (!sc.hasNextLine()) {
+                break;
+            }
 
             String input = sc.nextLine().trim();
 
@@ -75,11 +83,39 @@ public class Main {
                         System.out.println(target + ": not found");
                     }
                 }
+
                 continue;
             }
 
-            // unknown command
-            System.out.println(command + ": command not found");
+            // external executable
+            String executablePath = findExecutable(command);
+
+            if (executablePath != null) {
+                List<String> processCommand = new ArrayList<>();
+                processCommand.add(executablePath);
+
+                for (int i = 1; i < parts.length; i++) {
+                    processCommand.add(parts[i]);
+                }
+
+                Process process = new ProcessBuilder(processCommand)
+                        .redirectErrorStream(true)
+                        .start();
+
+                try (BufferedReader reader =
+                             new BufferedReader(
+                                     new InputStreamReader(process.getInputStream()))) {
+
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        System.out.println(line);
+                    }
+                }
+
+                process.waitFor();
+            } else {
+                System.out.println(command + ": command not found");
+            }
         }
     }
 }
