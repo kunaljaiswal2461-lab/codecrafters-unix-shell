@@ -10,11 +10,22 @@ public class Main {
 
             String input = sc.nextLine().trim();
 
-            if (input.equals("exit")) {
+            String[] parts = input.split("\\s+");
+            String command = parts[0];
+
+            if (command.equals("exit")) {
                 System.exit(0);
             }
 
-            String command = input.split(" ")[0];
+            if (command.equals("echo")) {
+                if (parts.length > 1) {
+                    System.out.println(input.substring(5));
+                } else {
+                    System.out.println();
+                }
+                continue;
+            }
+
             System.out.println(command + ": command not found");
         }
     }
