@@ -82,21 +82,29 @@ public class Main {
                 continue;
             }
 
-            // cd (absolute paths only)
+            // cd
             if (command.equals("cd")) {
 
                 if (parts.length < 2) {
                     continue;
                 }
 
-                Path target = Paths.get(parts[1]);
+                String targetDir = parts[1];
+                Path targetPath;
 
-                if (Files.exists(target) && Files.isDirectory(target)) {
-                    currentDirectory =
-                            target.toAbsolutePath().normalize();
+                if (Paths.get(targetDir).isAbsolute()) {
+                    targetPath = Paths.get(targetDir);
+                } else {
+                    targetPath = currentDirectory.resolve(targetDir);
+                }
+
+                targetPath = targetPath.normalize();
+
+                if (Files.exists(targetPath) && Files.isDirectory(targetPath)) {
+                    currentDirectory = targetPath;
                 } else {
                     System.out.println(
-                            "cd: " + parts[1] + ": No such file or directory"
+                            "cd: " + targetDir + ": No such file or directory"
                     );
                 }
 
@@ -113,20 +121,14 @@ public class Main {
                 String target = parts[1];
 
                 if (builtins.contains(target)) {
-                    System.out.println(
-                            target + " is a shell builtin"
-                    );
+                    System.out.println(target + " is a shell builtin");
                 } else {
                     String executable = findExecutable(target);
 
                     if (executable != null) {
-                        System.out.println(
-                                target + " is " + executable
-                        );
+                        System.out.println(target + " is " + executable);
                     } else {
-                        System.out.println(
-                                target + ": not found"
-                        );
+                        System.out.println(target + ": not found");
                     }
                 }
 
@@ -164,9 +166,7 @@ public class Main {
                 process.waitFor();
 
             } else {
-                System.out.println(
-                        command + ": command not found"
-                );
+                System.out.println(command + ": command not found");
             }
         }
     }
