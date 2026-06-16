@@ -1,10 +1,31 @@
+import java.io.File;
 import java.util.Scanner;
 import java.util.Set;
 
 public class Main {
-    public static void main(String[] args) throws Exception {
-        // TODO: Uncomment the code below to pass the first stage
-         Scanner sc = new Scanner(System.in);
+
+    private static String findExecutable(String command) {
+        String pathEnv = System.getenv("PATH");
+
+        if (pathEnv == null) {
+            return null;
+        }
+
+        String[] directories = pathEnv.split(File.pathSeparator);
+
+        for (String dir : directories) {
+            File file = new File(dir, command);
+
+            if (file.exists() && file.isFile() && file.canExecute()) {
+                return file.getAbsolutePath();
+            }
+        }
+
+        return null;
+    }
+
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
 
         Set<String> builtins = Set.of("echo", "exit", "type");
 
@@ -37,11 +58,19 @@ public class Main {
 
             // type builtin
             if (command.equals("type")) {
-                if (parts.length > 1) {
-                    String target = parts[1];
+                if (parts.length < 2) {
+                    continue;
+                }
 
-                    if (builtins.contains(target)) {
-                        System.out.println(target + " is a shell builtin");
+                String target = parts[1];
+
+                if (builtins.contains(target)) {
+                    System.out.println(target + " is a shell builtin");
+                } else {
+                    String executablePath = findExecutable(target);
+
+                    if (executablePath != null) {
+                        System.out.println(target + " is " + executablePath);
                     } else {
                         System.out.println(target + ": not found");
                     }
