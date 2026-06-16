@@ -1,6 +1,8 @@
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
@@ -8,6 +10,8 @@ import java.util.Scanner;
 import java.util.Set;
 
 public class Main {
+
+    private static Path currentDirectory = Paths.get("").toAbsolutePath().normalize();
 
     private static String findExecutable(String command) {
         String pathEnv = System.getenv("PATH");
@@ -36,7 +40,8 @@ public class Main {
                 "echo",
                 "exit",
                 "type",
-                "pwd"
+                "pwd",
+                "cd"
         );
 
         while (true) {
@@ -55,12 +60,12 @@ public class Main {
             String[] parts = input.split("\\s+");
             String command = parts[0];
 
-            // exit builtin
+            // exit
             if (command.equals("exit")) {
                 System.exit(0);
             }
 
-            // echo builtin
+            // echo
             if (command.equals("echo")) {
                 if (parts.length > 1) {
                     System.out.println(input.substring(5));
@@ -70,18 +75,32 @@ public class Main {
                 continue;
             }
 
-            // pwd builtin
+            // pwd
             if (command.equals("pwd")) {
-                System.out.println(
-                        Paths.get("")
-                                .toAbsolutePath()
-                                .normalize()
-                                .toString()
-                );
+                System.out.println(currentDirectory);
                 continue;
             }
 
-            // type builtin
+            // cd (absolute paths only for this stage)
+            if (command.equals("cd")) {
+                if (parts.length < 2) {
+                    continue;
+                }
+
+                Path target = Paths.get(parts[1]);
+
+                if (Files.exists(target) && Files.isDirectory(target)) {
+                    currentDirectory = target.toAbsolutePath().normalize();
+                } else {
+                    System.out.println(
+                            "cd: " + parts[1] + ": No such file or directory"
+                    );
+                }
+
+                continue;
+            }
+
+            // type
             if (command.equals("type")) {
                 if (parts.length < 2) {
                     continue;
@@ -104,19 +123,20 @@ public class Main {
                 continue;
             }
 
-            // external executable
+            // external commands
             String executablePath = findExecutable(command);
 
             if (executablePath != null) {
 
                 List<String> processCommand = new ArrayList<>();
-                processCommand.add(command);
+                processCommand.add(executablePath);
 
                 for (int i = 1; i < parts.length; i++) {
                     processCommand.add(parts[i]);
                 }
 
                 Process process = new ProcessBuilder(processCommand)
+                        .directory(currentDirectory.toFile())
                         .redirectErrorStream(true)
                         .start();
 
@@ -131,6 +151,7 @@ public class Main {
                 }
 
                 process.waitFor();
+
             } else {
                 System.out.println(command + ": command not found");
             }
