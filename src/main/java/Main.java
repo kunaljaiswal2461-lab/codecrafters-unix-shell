@@ -4,6 +4,8 @@ import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Scanner;
 import java.util.Set;
 
@@ -32,6 +34,37 @@ public class Main {
         return null;
     }
 
+    private static List<String> parseCommand(String input) {
+        List<String> tokens = new ArrayList<>();
+
+        StringBuilder current = new StringBuilder();
+        boolean inSingleQuotes = false;
+
+        for (int i = 0; i < input.length(); i++) {
+            char ch = input.charAt(i);
+
+            if (ch == '\'') {
+                inSingleQuotes = !inSingleQuotes;
+                continue;
+            }
+
+            if (Character.isWhitespace(ch) && !inSingleQuotes) {
+                if (current.length() > 0) {
+                    tokens.add(current.toString());
+                    current.setLength(0);
+                }
+            } else {
+                current.append(ch);
+            }
+        }
+
+        if (current.length() > 0) {
+            tokens.add(current.toString());
+        }
+
+        return tokens;
+    }
+
     public static void main(String[] args) throws Exception {
 
         Scanner sc = new Scanner(System.in);
@@ -52,14 +85,19 @@ public class Main {
                 break;
             }
 
-            String input = sc.nextLine().trim();
+            String input = sc.nextLine();
 
-            if (input.isEmpty()) {
+            if (input.trim().isEmpty()) {
                 continue;
             }
 
-            String[] parts = input.split("\\s+");
-            String command = parts[0];
+            List<String> parts = parseCommand(input);
+
+            if (parts.isEmpty()) {
+                continue;
+            }
+
+            String command = parts.get(0);
 
             // exit
             if (command.equals("exit")) {
@@ -68,11 +106,15 @@ public class Main {
 
             // echo
             if (command.equals("echo")) {
-                if (input.length() > 5) {
-                    System.out.println(input.substring(5));
-                } else {
-                    System.out.println();
+
+                for (int i = 1; i < parts.size(); i++) {
+                    if (i > 1) {
+                        System.out.print(" ");
+                    }
+                    System.out.print(parts.get(i));
                 }
+
+                System.out.println();
                 continue;
             }
 
@@ -85,14 +127,13 @@ public class Main {
             // cd
             if (command.equals("cd")) {
 
-                if (parts.length < 2) {
+                if (parts.size() < 2) {
                     continue;
                 }
 
-                String targetDir = parts[1];
+                String targetDir = parts.get(1);
                 Path targetPath;
 
-                // Handle ~
                 if (targetDir.equals("~")) {
                     String home = System.getenv("HOME");
 
@@ -105,22 +146,24 @@ public class Main {
                     continue;
                 }
 
-                // Absolute path
                 if (Paths.get(targetDir).isAbsolute()) {
                     targetPath = Paths.get(targetDir);
-                }
-                // Relative path
-                else {
+                } else {
                     targetPath = currentDirectory.resolve(targetDir);
                 }
 
                 targetPath = targetPath.normalize();
 
-                if (Files.exists(targetPath) && Files.isDirectory(targetPath)) {
+                if (Files.exists(targetPath) &&
+                        Files.isDirectory(targetPath)) {
+
                     currentDirectory = targetPath;
+
                 } else {
+
                     System.out.println(
-                            "cd: " + targetDir + ": No such file or directory"
+                            "cd: " + targetDir +
+                                    ": No such file or directory"
                     );
                 }
 
@@ -130,37 +173,46 @@ public class Main {
             // type
             if (command.equals("type")) {
 
-                if (parts.length < 2) {
+                if (parts.size() < 2) {
                     continue;
                 }
 
-                String target = parts[1];
+                String target = parts.get(1);
 
                 if (builtins.contains(target)) {
-                    System.out.println(target + " is a shell builtin");
+
+                    System.out.println(
+                            target + " is a shell builtin"
+                    );
+
                 } else {
-                    String executable = findExecutable(target);
+
+                    String executable =
+                            findExecutable(target);
 
                     if (executable != null) {
-                        System.out.println(target + " is " + executable);
+
+                        System.out.println(
+                                target + " is " + executable
+                        );
+
                     } else {
-                        System.out.println(target + ": not found");
+
+                        System.out.println(
+                                target + ": not found"
+                        );
                     }
                 }
 
                 continue;
             }
 
-            // external commands
+            // external command
             String executable = findExecutable(command);
 
             if (executable != null) {
 
-                Process process = new ProcessBuilder(
-                        "/bin/sh",
-                        "-c",
-                        input
-                )
+                Process process = new ProcessBuilder(parts)
                         .directory(currentDirectory.toFile())
                         .redirectErrorStream(true)
                         .start();
@@ -182,7 +234,10 @@ public class Main {
                 process.waitFor();
 
             } else {
-                System.out.println(command + ": command not found");
+
+                System.out.println(
+                        command + ": command not found"
+                );
             }
         }
     }
