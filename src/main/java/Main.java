@@ -49,12 +49,10 @@ public class Main {
             String[] parts = input.split("\\s+");
             String command = parts[0];
 
-            // exit builtin
             if (command.equals("exit")) {
                 System.exit(0);
             }
 
-            // echo builtin
             if (command.equals("echo")) {
                 if (parts.length > 1) {
                     System.out.println(input.substring(5));
@@ -64,7 +62,6 @@ public class Main {
                 continue;
             }
 
-            // type builtin
             if (command.equals("type")) {
                 if (parts.length < 2) {
                     continue;
@@ -87,12 +84,14 @@ public class Main {
                 continue;
             }
 
-            // external executable
             String executablePath = findExecutable(command);
 
             if (executablePath != null) {
+
                 List<String> processCommand = new ArrayList<>();
-                processCommand.add(executablePath);
+
+                // argv[0] must be the command name, not full path
+                processCommand.add(command);
 
                 for (int i = 1; i < parts.length; i++) {
                     processCommand.add(parts[i]);
@@ -102,11 +101,11 @@ public class Main {
                         .redirectErrorStream(true)
                         .start();
 
-                try (BufferedReader reader =
-                             new BufferedReader(
-                                     new InputStreamReader(process.getInputStream()))) {
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(process.getInputStream()))) {
 
                     String line;
+
                     while ((line = reader.readLine()) != null) {
                         System.out.println(line);
                     }
