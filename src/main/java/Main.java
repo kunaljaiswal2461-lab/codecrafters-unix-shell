@@ -165,11 +165,11 @@ public class Main {
     }
 
     private static List<String> filenameCompletionCandidates(String prefix) {
-        Path typedPath = Paths.get(prefix);
-        Path searchDirectory = typedPath.getParent();
-        String filePrefix = typedPath.getFileName() == null ? "" : typedPath.getFileName().toString();
-        Path directory = searchDirectory == null ? currentDirectory : resolvePath(searchDirectory.toString());
-        String renderedPrefix = searchDirectory == null ? "" : searchDirectory + File.separator;
+        int slashIndex = prefix.lastIndexOf('/');
+        String directoryPart = slashIndex == -1 ? "" : prefix.substring(0, slashIndex + 1);
+        String filePrefix = slashIndex == -1 ? prefix : prefix.substring(slashIndex + 1);
+        Path directory = directoryPart.isEmpty() ? currentDirectory : resolvePath(directoryPart);
+        String renderedPrefix = directoryPart;
 
         if (!Files.isDirectory(directory)) {
             return List.of();
