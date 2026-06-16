@@ -181,7 +181,7 @@ public class Main {
                     .filter(name -> name.startsWith(filePrefix))
                     .map(name -> {
                         Path fullPath = directory.resolve(name);
-                        String suffix = Files.isDirectory(fullPath) ? File.separator : "";
+                        String suffix = Files.isDirectory(fullPath) ? "/" : "";
                         return renderedPrefix + name + suffix;
                     })
                     .sorted()
@@ -195,7 +195,8 @@ public class Main {
         String current = line.toString();
 
         if (matches.size() == 1) {
-            String completion = matches.get(0).substring(prefix.length()) + " ";
+            String match = matches.get(0);
+            String completion = match.substring(prefix.length()) + (match.endsWith("/") ? "" : " ");
             line.append(completion);
             System.out.print(completion);
             lastCompletionInput = null;
