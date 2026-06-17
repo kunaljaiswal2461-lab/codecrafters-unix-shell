@@ -169,7 +169,7 @@ public class Main {
     }
 
     private static String previousWord(List<String> words) {
-        if (words.size() < 2) {
+        if (words.isEmpty()) {
             return "";
         }
         return words.get(words.size() - 1);
