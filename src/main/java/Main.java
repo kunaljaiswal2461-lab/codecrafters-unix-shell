@@ -145,11 +145,62 @@ public class Main {
         String current = line.toString();
         int tokenStart = currentTokenStart(current);
         String prefix = current.substring(tokenStart);
-        List<String> matches = tokenStart == 0
-                ? commandCompletionCandidates(prefix)
-                : filenameCompletionCandidates(prefix);
+        List<String> matches;
+
+        if (tokenStart == 0) {
+            matches = commandCompletionCandidates(prefix);
+        } else {
+            List<String> words = wordsBeforeCompletion(current, tokenStart);
+            CompletionSpec spec = words.isEmpty() ? null : COMPLETION_SPECS.get(words.get(0));
+            matches = spec == null
+                    ? filenameCompletionCandidates(prefix)
+                    : programmableCompletionCandidates(spec, current, prefix, previousWord(words));
+        }
 
         applyCompletion(line, prefix, matches);
+    }
+
+    private static List<String> wordsBeforeCompletion(String line, int tokenStart) {
+        String beforeCurrentWord = line.substring(0, tokenStart).trim();
+        if (beforeCurrentWord.isEmpty()) {
+            return List.of();
+        }
+        return tokenize(beforeCurrentWord);
+    }
+
+    private static String previousWord(List<String> words) {
+        if (words.size() < 2) {
+            return "";
+        }
+        return words.get(words.size() - 1);
+    }
+
+    private static List<String> programmableCompletionCandidates(
+            CompletionSpec spec,
+            String line,
+            String currentWord,
+            String previousWord
+    ) {
+        try {
+            ProcessBuilder builder = new ProcessBuilder(spec.script(), spec.command(), currentWord, previousWord)
+                    .directory(currentDirectory.toFile());
+            Map<String, String> environment = builder.environment();
+            environment.put("COMP_LINE", line);
+            environment.put("COMP_POINT", Integer.toString(line.length()));
+
+            Process process = builder.start();
+            byte[] stdout = process.getInputStream().readAllBytes();
+            process.getErrorStream().readAllBytes();
+            process.waitFor();
+
+            return new String(stdout, StandardCharsets.UTF_8)
+                    .lines()
+                    .filter(candidate -> !candidate.isEmpty())
+                    .sorted()
+                    .toList();
+        } catch (Exception e) {
+            return List.of();
+        }
     }
 
     private static int currentTokenStart(String line) {
