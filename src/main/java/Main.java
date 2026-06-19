@@ -573,6 +573,12 @@ public class Main {
             return;
         }
 
+        if (command.args.size() >= 3 && command.args.get(1).equals("-r")) {
+            String name = command.args.get(2);
+            COMPLETION_SPECS.remove(name);
+            return;
+        }
+
         if (command.args.size() >= 4 && command.args.get(1).equals("-C")) {
             String script = command.args.get(2);
             String name = command.args.get(3);
