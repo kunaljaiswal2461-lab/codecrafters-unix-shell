@@ -69,7 +69,7 @@ public class Main {
 
         try {
             while (true) {
-                reapCompletedJobs();
+                reapCompletedJobs(System.out);
                 System.out.print("$ ");
                 System.out.flush();
 
@@ -621,16 +621,24 @@ public class Main {
     }
 
     private static void runJobs(PrintStream out) {
-        reapCompletedJobs();
         List<Job> jobs = JOBS.values().stream()
                 .sorted(Comparator.comparingInt(job -> job.number))
                 .toList();
 
+        List<Integer> completed = new ArrayList<>();
+
         for (int i = 0; i < jobs.size(); i++) {
             Job job = jobs.get(i);
             String marker = i == jobs.size() - 1 ? "+" : i == jobs.size() - 2 ? "-" : " ";
-            out.printf("[%d]%s  Running                 %s &%n", job.number, marker, job.commandLine);
+            
+            if (job.done.get() || job.processes.stream().allMatch(process -> !process.isAlive())) {
+                out.printf("[%d]%s  Done                 %s%n", job.number, marker, job.commandLine);
+                completed.add(job.number);
+            } else {
+                out.printf("[%d]%s  Running                 %s &%n", job.number, marker, job.commandLine);
+            }
         }
+        completed.forEach(JOBS::remove);
     }
 
     private static void writeBuiltinStreams(Command command, byte[] stdout, byte[] stderr) throws IOException {
@@ -843,11 +851,20 @@ public class Main {
         }
     }
 
-    private static void reapCompletedJobs() {
-        Set<Integer> completed = new HashSet<>();
-        for (Map.Entry<Integer, Job> entry : JOBS.entrySet()) {
-            if (entry.getValue().done.get() || entry.getValue().processes.stream().allMatch(process -> !process.isAlive())) {
-                completed.add(entry.getKey());
+    private static void reapCompletedJobs(PrintStream out) {
+        List<Integer> completed = new ArrayList<>();
+        List<Job> jobsList = JOBS.values().stream()
+                .sorted(Comparator.comparingInt(job -> job.number))
+                .toList();
+
+        for (int i = 0; i < jobsList.size(); i++) {
+            Job job = jobsList.get(i);
+            if (job.done.get() || job.processes.stream().allMatch(process -> !process.isAlive())) {
+                completed.add(job.number);
+                String marker = i == jobsList.size() - 1 ? "+" : i == jobsList.size() - 2 ? "-" : " ";
+                if (out != null) {
+                    out.printf("[%d]%s  Done                 %s%n", job.number, marker, job.commandLine);
+                }
             }
         }
         completed.forEach(JOBS::remove);
