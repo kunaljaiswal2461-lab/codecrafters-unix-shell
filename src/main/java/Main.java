@@ -677,8 +677,46 @@ public class Main {
     }
 
     private static void executePipelineForeground(List<Command> commands) throws Exception {
-        byte[] input = new byte[0];
+        boolean hasBuiltin = commands.stream().anyMatch(Command::isBuiltin);
+        boolean hasIntermediateStdoutRedirect = false;
+        for (int i = 0; i < commands.size() - 1; i++) {
+            if (lastRedirect(commands.get(i), 1) != null) {
+                hasIntermediateStdoutRedirect = true;
+                break;
+            }
+        }
 
+        if (!hasBuiltin && !hasIntermediateStdoutRedirect) {
+            List<ProcessBuilder> builders = new ArrayList<>();
+            for (Command command : commands) {
+                if (findExecutable(command.args.get(0)) == null && !isExecutablePath(command.args.get(0))) {
+                    builders.add(new ProcessBuilder("sh", "-c", "echo '" + command.args.get(0) + ": command not found' >&2; exit 127"));
+                } else {
+                    builders.add(processBuilder(command));
+                }
+            }
+
+            ProcessBuilder first = builders.get(0);
+            ProcessBuilder last = builders.get(builders.size() - 1);
+
+            first.redirectInput(ProcessBuilder.Redirect.INHERIT);
+            Redirection stdoutRedirect = lastRedirect(commands.get(commands.size() - 1), 1);
+            last.redirectOutput(stdoutRedirect == null ? ProcessBuilder.Redirect.INHERIT : redirectFor(stdoutRedirect));
+
+            for (int i = 0; i < commands.size(); i++) {
+                ProcessBuilder builder = builders.get(i);
+                Redirection stderrRedirect = lastRedirect(commands.get(i), 2);
+                builder.redirectError(stderrRedirect == null ? ProcessBuilder.Redirect.INHERIT : redirectFor(stderrRedirect));
+            }
+
+            List<Process> processes = ProcessBuilder.startPipeline(builders);
+            for (Process process : processes) {
+                process.waitFor();
+            }
+            return;
+        }
+
+        byte[] input = new byte[0];
         for (int i = 0; i < commands.size(); i++) {
             Command command = commands.get(i);
             boolean last = i == commands.size() - 1;
@@ -791,20 +829,25 @@ public class Main {
                 throw new ShellParseException("background pipelines with builtins are not supported");
             }
             if (findExecutable(command.args.get(0)) == null && !isExecutablePath(command.args.get(0))) {
-                System.out.println(command.args.get(0) + ": command not found");
-                return List.of();
+                builders.add(new ProcessBuilder("sh", "-c", "echo '" + command.args.get(0) + ": command not found' >&2; exit 127"));
+            } else {
+                builders.add(processBuilder(command));
             }
-            builders.add(processBuilder(command));
         }
 
         ProcessBuilder first = builders.get(0);
         ProcessBuilder last = builders.get(builders.size() - 1);
         first.redirectInput(ProcessBuilder.Redirect.INHERIT);
-        last.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-        for (ProcessBuilder builder : builders) {
-            builder.redirectError(ProcessBuilder.Redirect.INHERIT);
+        
+        Redirection stdoutRedirect = lastRedirect(commands.get(commands.size() - 1), 1);
+        last.redirectOutput(stdoutRedirect == null ? ProcessBuilder.Redirect.INHERIT : redirectFor(stdoutRedirect));
+        
+        for (int i = 0; i < commands.size(); i++) {
+            ProcessBuilder builder = builders.get(i);
+            Redirection stderrRedirect = lastRedirect(commands.get(i), 2);
+            builder.redirectError(stderrRedirect == null ? ProcessBuilder.Redirect.INHERIT : redirectFor(stderrRedirect));
         }
-        applyProcessRedirections(last, commands.get(commands.size() - 1));
+        
         return ProcessBuilder.startPipeline(builders);
     }
 
